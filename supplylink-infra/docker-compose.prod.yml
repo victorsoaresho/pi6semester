@@ -1,0 +1,75 @@
+version: '3.9'
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: supplylink-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - api
+      - web
+    restart: unless-stopped
+
+  api:
+    build: ../supplylink-api
+    container_name: supplylink-api
+    env_file: ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build: ../supplylink-web
+    container_name: supplylink-web
+    env_file: ../.env.web
+    restart: unless-stopped
+
+  ml:
+    build: ../supplylink-ml
+    container_name: supplylink-ml
+    env_file: ../.env.ml
+    volumes:
+      - ml_models:/app/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: supplylink-postgres
+    env_file: ../.env.postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U supplylink -d supplylink"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: supplylink-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
+  ml_models:
